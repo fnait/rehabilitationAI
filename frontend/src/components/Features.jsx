@@ -1,56 +1,43 @@
+import { useTranslation } from "react-i18next";
+
 function Features() {
+  // Беремо функцію перекладу
+  const { t } = useTranslation();
+
   return (
     <section className="features">
       <div className="container">
-        <h2 className="section-title">Основні можливості</h2>
+        <h2 className="section-title">{t("features.title")}</h2>
 
         <div className="features__grid">
           <div className="card">
-            <h3>Персональний вибір вправ</h3>
-            <p>
-              Користувач зможе обрати частину тіла, для якої потрібна
-              реабілітація, та отримати відповідний набір вправ.
-            </p>
+            <h3>{t("features.card1Title")}</h3>
+            <p>{t("features.card1Text")}</p>
           </div>
 
           <div className="card">
-            <h3>Планування занять</h3>
-            <p>
-              Система буде зберігати інформацію про заняття та допомагати
-              користувачу дотримуватися регулярного графіка виконання вправ.
-            </p>
+            <h3>{t("features.card2Title")}</h3>
+            <p>{t("features.card2Text")}</p>
           </div>
 
           <div className="card">
-            <h3>Аналіз рухів через камеру</h3>
-            <p>
-              У перспективі застосунок буде використовувати штучний інтелект для
-              аналізу правильності виконання вправ у реальному часі.
-            </p>
+            <h3>{t("features.card3Title")}</h3>
+            <p>{t("features.card3Text")}</p>
           </div>
 
           <div className="card">
-            <h3>Підказки під час вправ</h3>
-            <p>
-              Користувач зможе отримувати повідомлення про помилки у виконанні
-              рухів та рекомендації щодо покращення техніки.
-            </p>
+            <h3>{t("features.card4Title")}</h3>
+            <p>{t("features.card4Text")}</p>
           </div>
 
           <div className="card">
-            <h3>Відстеження прогресу</h3>
-            <p>
-              Результати занять можна буде зберігати в базі даних для подальшого
-              перегляду та аналізу.
-            </p>
+            <h3>{t("features.card5Title")}</h3>
+            <p>{t("features.card5Text")}</p>
           </div>
 
           <div className="card">
-            <h3>Зручний вебдоступ</h3>
-            <p>
-              Система буде доступна через браузер, тому користувач зможе
-              працювати із застосунком без встановлення окремої програми.
-            </p>
+            <h3>{t("features.card6Title")}</h3>
+            <p>{t("features.card6Text")}</p>
           </div>
         </div>
       </div>

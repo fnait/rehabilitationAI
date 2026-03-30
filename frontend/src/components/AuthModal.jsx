@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { auth } from "../firebase/firebase";
 import {
   createUserWithEmailAndPassword,
@@ -7,6 +8,7 @@ import {
 } from "firebase/auth";
 
 function AuthModal({ isOpen, onClose, mode: initialMode }) {
+  const { t } = useTranslation();
   // Поточний режим модалки
   const [mode, setMode] = useState("login");
 
@@ -150,19 +152,21 @@ function AuthModal({ isOpen, onClose, mode: initialMode }) {
           ×
         </button>
 
-        <h2>{mode === "login" ? "Вхід" : "Реєстрація"}</h2>
+        <h2>
+          {mode === "login" ? t("auth.loginTitle") : t("auth.registerTitle")}
+        </h2>
 
         <p className="auth-subtitle">
           {mode === "login"
-            ? "Увійдіть у свій акаунт, щоб продовжити роботу."
-            : "Створіть акаунт, щоб користуватися системою."}
+            ? t("auth.loginSubtitle")
+            : t("auth.registerSubtitle")}
         </p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
           {mode === "register" && (
             <input
               type="text"
-              placeholder="Ім'я"
+              placeholder={t("auth.name")}
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
@@ -170,14 +174,14 @@ function AuthModal({ isOpen, onClose, mode: initialMode }) {
 
           <input
             type="email"
-            placeholder="Email"
+            placeholder={t("auth.email")}
             value={email}
             onChange={(event) => setEmail(event.target.value)}
           />
 
           <input
             type="password"
-            placeholder="Пароль"
+            placeholder={t("auth.password")}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
           />
@@ -190,17 +194,19 @@ function AuthModal({ isOpen, onClose, mode: initialMode }) {
 
           <button type="submit" className="btn btn--primary auth-btn">
             {loading
-              ? "Зачекайте..."
+              ? "..."
               : mode === "login"
-                ? "Увійти"
-                : "Зареєструватися"}
+                ? t("auth.loginButton")
+                : t("auth.registerButton")}
           </button>
         </form>
 
         <p className="auth-switch">
-          {mode === "login" ? "Ще немає акаунта?" : "Вже є акаунт?"}{" "}
+          {mode === "login" ? t("auth.noAccount") : t("auth.haveAccount")}{" "}
           <span onClick={handleSwitchMode}>
-            {mode === "login" ? "Зареєструватися" : "Увійти"}
+            {mode === "login"
+              ? t("auth.switchToRegister")
+              : t("auth.switchToLogin")}
           </span>
         </p>
       </div>
