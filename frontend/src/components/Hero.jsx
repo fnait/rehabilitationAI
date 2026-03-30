@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/useAuth";
+import { Link } from "react-router-dom";
 
 function Hero({ onOpenLogin, onOpenRegister }) {
   const { t } = useTranslation();
@@ -14,7 +15,8 @@ function Hero({ onOpenLogin, onOpenRegister }) {
           <h2>{t("hero.title")}</h2>
 
           <p>{t("hero.description")}</p>
-          {!user && (
+
+          {!user ? (
             <div className="hero__buttons">
               <button
                 type="button"
@@ -31,6 +33,12 @@ function Hero({ onOpenLogin, onOpenRegister }) {
               >
                 {t("hero.login")}
               </button>
+            </div>
+          ) : (
+            <div className="hero__buttons">
+              <Link to="/dashboard" className="btn btn--primary">
+                Перейти в кабінет
+              </Link>
             </div>
           )}
         </div>

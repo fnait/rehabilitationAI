@@ -56,5 +56,83 @@
     "haveAccount": "Already have an account?",
     "switchToRegister": "Register",
     "switchToLogin": "Log in"
+  },
+  "dashboard": {
+    "label": "Dashboard",
+    "welcome": "Welcome, {{name}}",
+    "description": "Choose the part of the body for which you want to view rehabilitation exercises. In the next stages, there will be a list of exercises, recommendations, and AI-based movement analysis here.",
+    "sectionTitle": "Choose the problem area",
+    "selectedTitle": "Selected: {{title}}",
+    "selectedNote": "Here we will later implement an exercise list, training schedule, progress saving, and exercise correctness checking through the camera.",
+    "exerciseTitle": "Recommended exercises",
+    "areas": {
+      "arm": {
+        "title": "Arm",
+        "description": "Exercises for restoring mobility of the shoulder, elbow, wrist, and hand."
+      },
+      "leg": {
+        "title": "Leg",
+        "description": "Exercises for restoring the knee, foot, lower leg, and overall movement stability."
+      },
+      "back": {
+        "title": "Back",
+        "description": "Exercises for improving posture, reducing tension, and strengthening the back muscles."
+      },
+      "neck": {
+        "title": "Neck",
+        "description": "Exercises for gentle restoration of neck mobility and reducing discomfort."
+      }
+    }
+  },
+  "exercises": {
+    "armRaiseForward": {
+      "title": "Arm raise forward",
+      "reps": "10 reps",
+      "description": "Slowly raise your arm forward to a comfortable level."
+    },
+    "elbowFlexion": {
+      "title": "Elbow flexion",
+      "reps": "12 reps",
+      "description": "Slowly bend your arm at the elbow."
+    },
+    "seatedLegRaise": {
+      "title": "Seated leg raise",
+      "reps": "10 reps",
+      "description": "While sitting upright, slowly raise your leg forward and then lower it back down."
+    },
+    "kneeFlexion": {
+      "title": "Knee flexion",
+      "reps": "12 reps",
+      "description": "Slowly bend the leg at the knee within a comfortable range of motion."
+    },
+    "shoulderBackwardMovement": {
+      "title": "Shoulder backward movement",
+      "reps": "10 reps",
+      "description": "Slowly move your shoulders backward, trying to open the chest."
+    },
+    "gentleBackStretch": {
+      "title": "Gentle back stretch",
+      "reps": "8 reps",
+      "description": "Perform a gentle back stretch without sudden bends."
+    },
+    "sideNeckTilts": {
+      "title": "Side neck tilts",
+      "reps": "8 reps",
+      "description": "Slowly tilt your head left and right without sudden movements."
+    },
+    "headTurns": {
+      "title": "Head turns",
+      "reps": "10 reps",
+      "description": "Gently turn your head to the sides within a comfortable range."
+    }
+  },
+  "exercise": {
+    "back": "Back to dashboard",
+    "label": "Exercise page",
+    "start": "Start exercise",
+    "cameraTitle": "Camera block",
+    "cameraPlaceholder": "At the next stages, the user's camera and real-time AI movement analysis will be displayed here.",
+    "tipTitle": "Tip",
+    "tipText": "Perform the exercise slowly, without sudden movements, and stop if you feel strong pain."
   }
 }
