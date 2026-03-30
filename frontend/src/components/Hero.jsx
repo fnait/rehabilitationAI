@@ -1,7 +1,9 @@
 import { useTranslation } from "react-i18next";
+import { useAuth } from "../context/useAuth";
 
 function Hero({ onOpenLogin, onOpenRegister }) {
   const { t } = useTranslation();
+  const { user } = useAuth();
 
   return (
     <section className="hero">
@@ -12,24 +14,25 @@ function Hero({ onOpenLogin, onOpenRegister }) {
           <h2>{t("hero.title")}</h2>
 
           <p>{t("hero.description")}</p>
+          {!user && (
+            <div className="hero__buttons">
+              <button
+                type="button"
+                className="btn btn--primary"
+                onClick={onOpenRegister}
+              >
+                {t("hero.start")}
+              </button>
 
-          <div className="hero__buttons">
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={onOpenRegister}
-            >
-              {t("hero.start")}
-            </button>
-
-            <button
-              type="button"
-              className="btn btn--secondary"
-              onClick={onOpenLogin}
-            >
-              {t("hero.login")}
-            </button>
-          </div>
+              <button
+                type="button"
+                className="btn btn--secondary"
+                onClick={onOpenLogin}
+              >
+                {t("hero.login")}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="hero__info-card">

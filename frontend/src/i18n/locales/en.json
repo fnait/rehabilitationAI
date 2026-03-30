@@ -2,6 +2,7 @@
   "header": {
     "login": "Log in",
     "register": "Register",
+    "logout": "Log out",
     "language": "Language"
   },
   "hero": {
