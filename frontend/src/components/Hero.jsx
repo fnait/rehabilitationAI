@@ -1,6 +1,4 @@
-import { Link } from "react-router-dom";
-
-function Hero({ onOpenAuth }) {
+function Hero({ onOpenLogin, onOpenRegister }) {
   return (
     <section className="hero">
       <div className="container hero__content">
@@ -19,11 +17,19 @@ function Hero({ onOpenAuth }) {
           </p>
 
           <div className="hero__buttons">
-            <button className="btn btn--primary" onClick={onOpenAuth}>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={onOpenRegister}
+            >
               Почати зараз
             </button>
 
-            <button className="btn btn--secondary" onClick={onOpenAuth}>
+            <button
+              type="button"
+              className="btn btn--secondary"
+              onClick={onOpenLogin}
+            >
               Увійти
             </button>
           </div>

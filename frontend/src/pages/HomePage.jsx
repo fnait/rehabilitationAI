@@ -7,13 +7,40 @@ import Footer from "../components/Footer";
 import AuthModal from "../components/AuthModal";
 
 function HomePage() {
+  // Стан відкриття модального вікна
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+
+  // Поточний режим модалки: login або register
+  const [authMode, setAuthMode] = useState("login");
+
+  // Відкрити модалку у режимі входу
+  const handleOpenLogin = () => {
+    setAuthMode("login");
+    setIsAuthOpen(true);
+  };
+
+  // Відкрити модалку у режимі реєстрації
+  const handleOpenRegister = () => {
+    setAuthMode("register");
+    setIsAuthOpen(true);
+  };
+
+  // Закрити модалку
+  const handleCloseAuth = () => {
+    setIsAuthOpen(false);
+  };
 
   return (
     <>
-      <Header onOpenAuth={() => setIsAuthOpen(true)} />
+      <Header
+        onOpenLogin={handleOpenLogin}
+        onOpenRegister={handleOpenRegister}
+      />
 
-      <Hero onOpenAuth={() => setIsAuthOpen(true)} />
+      <Hero
+        onOpenLogin={handleOpenLogin}
+        onOpenRegister={handleOpenRegister}
+      />
 
       <Features />
       <HowItWorks />
@@ -21,7 +48,8 @@ function HomePage() {
 
       <AuthModal
         isOpen={isAuthOpen}
-        onClose={() => setIsAuthOpen(false)}
+        mode={authMode}
+        onClose={handleCloseAuth}
       />
     </>
   );

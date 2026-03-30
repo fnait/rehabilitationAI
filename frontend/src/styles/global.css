@@ -503,3 +503,19 @@ a {
 .nav-register:hover {
   background-color: var(--color-primary-dark);
 }
+
+.auth-message {
+  font-size: 14px;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.auth-message--error {
+  color: #b91c1c;
+  background-color: #fee2e2;
+}
+
+.auth-message--success {
+  color: #166534;
+  background-color: #dcfce7;
+}

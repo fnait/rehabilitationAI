@@ -1,17 +1,19 @@
-import { Link } from "react-router-dom";
-
-function Header({ onOpenAuth }) {
+function Header({ onOpenLogin, onOpenRegister }) {
   return (
     <header className="header">
       <div className="container header__content">
         <div className="logo">RehabAI</div>
 
         <nav className="nav">
-          <button className="nav-btn" onClick={onOpenAuth}>
+          <button type="button" className="nav-btn" onClick={onOpenLogin}>
             Увійти
           </button>
 
-          <button className="nav-register" onClick={onOpenAuth}>
+          <button
+            type="button"
+            className="nav-register"
+            onClick={onOpenRegister}
+          >
             Реєстрація
           </button>
         </nav>
