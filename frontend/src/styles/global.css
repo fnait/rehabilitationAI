@@ -1030,6 +1030,37 @@ a {
   line-height: 1.5;
 }
 
+.exercise-camera-large {
+  position: relative;
+}
+
+.exercise-video,
+.exercise-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.exercise-video {
+  object-fit: contain;
+  transform: scaleX(-1);
+  background-color: #000;
+}
+
+.exercise-canvas {
+  z-index: 2;
+  pointer-events: none;
+  transform: scaleX(-1);
+}
+
+.exercise-ai-status {
+  display: block;
+  margin-top: 8px;
+  opacity: 0.85;
+  font-size: 12px;
+}
+
 @media (max-width: 900px) {
   .exercise-camera-header {
     flex-direction: column;

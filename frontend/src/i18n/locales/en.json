@@ -153,6 +153,8 @@
     "hintRaiseHigher": "Raise your arm a little higher.",
     "hintSlowDown": "Perform the movement more slowly.",
     "hintGood": "Good, continue at the same pace.",
-    "nextHint": "Next hint"
+    "nextHint": "Next hint",
+    "aiReady": "AI is ready",
+    "aiLoading": "AI is loading"
   }
 }
