@@ -133,6 +133,16 @@
     "cameraTitle": "Camera block",
     "cameraPlaceholder": "At the next stages, the user's camera and real-time AI movement analysis will be displayed here.",
     "tipTitle": "Tip",
-    "tipText": "Perform the exercise slowly, without sudden movements, and stop if you feel strong pain."
+    "tipText": "Perform the exercise slowly, without sudden movements, and stop if you feel strong pain.",
+    "stop": "Finish exercise",
+    "statusReady": "Status: exercise has not started yet",
+    "statusActive": "Status: exercise in progress",
+    "timerLabel": "Exercise time",
+    "fullscreen": "Fullscreen",
+    "cameraStart": "Увімкнути камеру",
+    "cameraStop": "Вимкнути камеру",
+    "cameraOff": "Камера вимкнена. Натисніть кнопку нижче, щоб почати.",
+    "cameraError": "Не вдалося отримати доступ до камери.",
+    "cameraPermission": "Дозвольте доступ до камери у браузері."
   }
 }

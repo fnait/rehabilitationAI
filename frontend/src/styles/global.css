@@ -706,7 +706,15 @@ a {
   align-items: start;
 }
 
-.exercise-main-card,
+.exercise-main-card {
+  background-color: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  padding: 28px;
+  box-shadow: var(--shadow-main);
+  margin-bottom: 24px;
+}
+
 .exercise-side-card {
   background-color: var(--color-white);
   border: 1px solid var(--color-border);
@@ -744,10 +752,58 @@ a {
   margin-bottom: 24px;
 }
 
+.exercise-status-box {
+  background-color: #f8fbff;
+  border: 1px solid #d7e4ff;
+  border-radius: 16px;
+  padding: 16px 18px;
+  margin-bottom: 24px;
+}
+
+.exercise-status-box p {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.exercise-status-box p + p {
+  margin-top: 8px;
+}
+
 .exercise-actions {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.exercise-camera-section {
+  background-color: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  padding: 28px;
+  box-shadow: var(--shadow-main);
+}
+
+.exercise-camera-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.exercise-camera-header h2 {
+  color: var(--color-dark);
+}
+
+.exercise-camera-large {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 2px dashed var(--color-border);
+  border-radius: 18px;
+  overflow: hidden;
+  background-color: #000;
+  margin-bottom: 20px;
 }
 
 .exercise-side-card h2 {
@@ -756,17 +812,30 @@ a {
 }
 
 .exercise-camera-placeholder {
-  min-height: 260px;
-  border: 2px dashed var(--color-border);
-  border-radius: 18px;
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
   padding: 20px;
-  background-color: #f8fbff;
   color: var(--color-text-light);
-  margin-bottom: 20px;
+  background-color: #f8fbff;
+}
+
+.exercise-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background-color: #000;
+
+  /* Віддзеркалення як у звичайній фронтальній камері */
+  transform: scaleX(-1);
+}
+
+.exercise-video--hidden {
+  display: none;
 }
 
 .exercise-tip-box {
@@ -798,12 +867,58 @@ a {
   color: var(--color-dark);
 }
 
+.exercise-camera-error {
+  background-color: #fee2e2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+}
+
+.exercise-camera-error p + p {
+  margin-top: 6px;
+}
+
+.exercise-camera-section:fullscreen {
+  background-color: #111;
+  padding: 20px;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: auto;
+}
+
+.exercise-camera-section:fullscreen .exercise-camera-header {
+  flex-shrink: 0;
+}
+
+.exercise-camera-section:fullscreen .exercise-camera-large {
+  height: 68vh;
+  min-height: 320px;
+  max-height: 68vh;
+  border: none;
+  border-radius: 12px;
+  margin-bottom: 0;
+}
+
+.exercise-camera-section:fullscreen .exercise-tip-box {
+  flex-shrink: 0;
+  margin-top: 0;
+}
+
+.exercise-camera-section:fullscreen .exercise-actions {
+  flex-shrink: 0;
+}
+
 @media (max-width: 900px) {
-  .exercise-layout {
-    grid-template-columns: 1fr;
+  .exercise-camera-header {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
-  .exercise-main-card h1 {
-    font-size: 30px;
+  .exercise-camera-large {
+    aspect-ratio: 4 / 3;
   }
 }
