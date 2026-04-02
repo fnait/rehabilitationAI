@@ -9,6 +9,9 @@ import { createPoseLandmarker } from "../utils/poseLandmarker";
 const allExercises = Object.values(exercises).flat();
 
 // Простий список з'єднань для малювання скелета
+const LANDMARK_VISIBILITY_THRESHOLD = 0.4;
+const AI_FRAME_INTERVAL_MS = 100;
+
 const POSE_CONNECTIONS = [
   [11, 12], // плечі
   [11, 13],
@@ -60,6 +63,7 @@ function ExercisePage() {
   // Стан AI
   const [isAiReady, setIsAiReady] = useState(false);
   const [aiHint, setAiHint] = useState("");
+  const aiHintRef = useRef("");
 
   // Тестові підказки
   const [hintIndex, setHintIndex] = useState(0);
@@ -144,7 +148,11 @@ function ExercisePage() {
   // Малювання точок
   const drawLandmarks = (ctx, landmarks, width, height) => {
     landmarks.forEach((point) => {
-      if (point.visibility !== undefined && point.visibility < 0.4) return;
+      if (
+        point.visibility !== undefined &&
+        point.visibility < LANDMARK_VISIBILITY_THRESHOLD
+      )
+        return;
 
       const x = point.x * width;
       const y = point.y * height;
@@ -166,8 +174,16 @@ function ExercisePage() {
       const end = landmarks[endIndex];
 
       if (!start || !end) return;
-      if (start.visibility !== undefined && start.visibility < 0.4) return;
-      if (end.visibility !== undefined && end.visibility < 0.4) return;
+      if (
+        start.visibility !== undefined &&
+        start.visibility < LANDMARK_VISIBILITY_THRESHOLD
+      )
+        return;
+      if (
+        end.visibility !== undefined &&
+        end.visibility < LANDMARK_VISIBILITY_THRESHOLD
+      )
+        return;
 
       ctx.beginPath();
       ctx.moveTo(start.x * width, start.y * height);
@@ -201,31 +217,52 @@ function ExercisePage() {
     drawLandmarks(ctx, landmarks, canvas.width, canvas.height);
   };
 
-  // Базова логіка для вправ руки
-  const checkArmRaise = (landmarks) => {
+  const setHintSafely = (hintText) => {
+    if (aiHintRef.current !== hintText) {
+      aiHintRef.current = hintText;
+      setAiHint(hintText);
+    }
+  };
+
+  const getJointAngle = (a, b, c) => {
+    if (!a || !b || !c) return null;
+
+    const abX = a.x - b.x;
+    const abY = a.y - b.y;
+    const cbX = c.x - b.x;
+    const cbY = c.y - b.y;
+
+    const dot = abX * cbX + abY * cbY;
+    const magAB = Math.hypot(abX, abY);
+    const magCB = Math.hypot(cbX, cbY);
+
+    if (!magAB || !magCB) return null;
+
+    const cosine = Math.min(1, Math.max(-1, dot / (magAB * magCB)));
+    return (Math.acos(cosine) * 180) / Math.PI;
+  };
+
+  const checkArmExercise = (landmarks) => {
     const rightShoulder = landmarks[12];
+    const rightElbow = landmarks[14];
     const rightWrist = landmarks[16];
-    const leftShoulder = landmarks[11];
-    const leftWrist = landmarks[15];
 
-    console.log("Right shoulder:", rightShoulder, "Right wrist:", rightWrist);
-    console.log("Left shoulder:", leftShoulder, "Left wrist:", leftWrist);
-
-    if (!rightShoulder || !rightWrist || !leftShoulder || !leftWrist) {
-      console.log("Missing landmarks for arm check");
+    if (!rightShoulder || !rightElbow || !rightWrist) {
       return "exercise.hintDefault";
     }
 
-    const rightUp = rightWrist.y < rightShoulder.y;
-    const leftUp = leftWrist.y < leftShoulder.y;
+    if (exercise?.slug === "elbow-flexion") {
+      const elbowAngle = getJointAngle(rightShoulder, rightElbow, rightWrist);
 
-    console.log("Right arm up:", rightUp, "Left arm up:", leftUp);
+      if (!elbowAngle) return "exercise.hintDefault";
+      if (elbowAngle < 70) return "exercise.hintGood";
+      if (elbowAngle > 145) return "exercise.hintRaiseHigher";
 
-    if (rightUp || leftUp) {
-      return "exercise.hintGood";
+      return "exercise.hintSlowDown";
     }
 
-    return "exercise.hintRaiseHigher";
+    const isWristAboveShoulder = rightWrist.y < rightShoulder.y;
+    return isWristAboveShoulder ? "exercise.hintGood" : "exercise.hintRaiseHigher";
   };
 
   // Аналіз кадру
@@ -247,7 +284,7 @@ function ExercisePage() {
     }
 
     // Обмежуємо частоту аналізу
-    if (rafTime - lastAnalyzeCallRef.current < 80) {
+    if (rafTime - lastAnalyzeCallRef.current < AI_FRAME_INTERVAL_MS) {
       animationFrameRef.current = requestAnimationFrame(analyzePoseFrame);
       return;
     }
@@ -279,16 +316,17 @@ function ExercisePage() {
         drawPose(landmarks);
 
         if (area === "arm") {
-          const hintKey = checkArmRaise(landmarks);
-          setAiHint(t(hintKey));
+          const hintKey = checkArmExercise(landmarks);
+          setHintSafely(t(hintKey));
         } else {
-          setAiHint(t("exercise.hintDefault"));
+          setHintSafely(t("exercise.hintDefault"));
         }
       } else {
         clearCanvas();
-        setAiHint(t("exercise.hintDefault"));
+        setHintSafely(t("exercise.hintDefault"));
       }
     } catch (error) {
+      setHintSafely(t("exercise.hintDefault"));
       console.log("Помилка аналізу пози:", error);
     }
 
@@ -316,6 +354,7 @@ function ExercisePage() {
     try {
       setCameraError("");
       setAiHint("");
+      aiHintRef.current = "";
       setIsAiReady(false);
 
       stopAnimationLoop();
@@ -339,12 +378,19 @@ function ExercisePage() {
       videoRef.current.srcObject = stream;
 
       await new Promise((resolve) => {
-        if (!videoRef.current) {
+        const videoElement = videoRef.current;
+
+        if (!videoElement) {
           resolve();
           return;
         }
 
-        videoRef.current.onloadedmetadata = () => resolve();
+        if (videoElement.readyState >= HTMLMediaElement.HAVE_METADATA) {
+          resolve();
+          return;
+        }
+
+        videoElement.onloadedmetadata = () => resolve();
       });
 
       if (!videoRef.current) return;
@@ -360,15 +406,6 @@ function ExercisePage() {
 
         const ctx = canvas.getContext("2d");
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // Тестовий квадрат
-        ctx.fillStyle = "red";
-        ctx.fillRect(40, 40, 220, 220);
-
-        // Тестовий текст
-        ctx.fillStyle = "white";
-        ctx.font = "32px Arial";
-        ctx.fillText("TEST", 90, 170);
       }
 
       const landmarker = await createPoseLandmarker();
@@ -388,6 +425,7 @@ function ExercisePage() {
       setCameraError(t("exercise.cameraError"));
       setIsCameraOn(false);
       setIsAiReady(false);
+      aiHintRef.current = "";
 
       stopAnimationLoop();
       stopCameraStream();
@@ -409,6 +447,7 @@ function ExercisePage() {
     setIsCameraOn(false);
     setIsAiReady(false);
     setAiHint("");
+    aiHintRef.current = "";
   };
 
   // Повноекранний режим
