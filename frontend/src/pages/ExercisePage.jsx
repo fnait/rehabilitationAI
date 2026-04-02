@@ -28,6 +28,19 @@ function ExercisePage() {
   const videoRef = useRef(null);
   const cameraSectionRef = useRef(null);
 
+  // Тестові підказки для майбутнього AI
+const hintKeys = [
+  "exercise.hintDefault",
+  "exercise.hintBackStraight",
+  "exercise.hintRaiseHigher",
+  "exercise.hintSlowDown",
+  "exercise.hintGood",
+];
+
+// Поточний індекс підказки
+const [hintIndex, setHintIndex] = useState(0);
+
+
   // Таймер вправи
   useEffect(() => {
     let interval = null;
@@ -84,40 +97,40 @@ function ExercisePage() {
   }, []);
 
   // Увімкнення камери
-const handleStartCamera = async () => {
-  try {
-    setCameraError("");
+  const handleStartCamera = async () => {
+    try {
+      setCameraError("");
 
-const stream = await navigator.mediaDevices.getUserMedia({
-  video: {
-    width: { ideal: 1280 },
-    height: { ideal: 720 },
-    aspectRatio: { ideal: 16 / 9 },
-    facingMode: "user",
-  },
-  audio: false,
-});
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          aspectRatio: { ideal: 16 / 9 },
+          facingMode: "user",
+        },
+        audio: false,
+      });
 
-    if (videoRef.current) {
-      videoRef.current.srcObject = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
 
-      // Чекаємо, поки браузер підготує відео
-      videoRef.current.onloadedmetadata = async () => {
-        try {
-          await videoRef.current.play();
-        } catch (error) {
-          console.log("Помилка запуску відео:", error);
-        }
-      };
+        // Чекаємо, поки браузер підготує відео
+        videoRef.current.onloadedmetadata = async () => {
+          try {
+            await videoRef.current.play();
+          } catch (error) {
+            console.log("Помилка запуску відео:", error);
+          }
+        };
+      }
+
+      setIsCameraOn(true);
+    } catch (error) {
+      console.log("Помилка доступу до камери:", error);
+      setCameraError(t("exercise.cameraError"));
+      setIsCameraOn(false);
     }
-
-    setIsCameraOn(true);
-  } catch (error) {
-    console.log("Помилка доступу до камери:", error);
-    setCameraError(t("exercise.cameraError"));
-    setIsCameraOn(false);
-  }
-};
+  };
 
   // Вимкнення камери
   const handleStopCamera = () => {
@@ -162,6 +175,10 @@ const stream = await navigator.mediaDevices.getUserMedia({
   const title = t(`exercises.${exercise.key}.title`);
   const reps = t(`exercises.${exercise.key}.reps`);
   const description = t(`exercises.${exercise.key}.description`);
+  const currentHint = t(hintKeys[hintIndex]);
+  const handleNextHint = () => {
+  setHintIndex((prev) => (prev + 1) % hintKeys.length);
+};
 
   return (
     <>
@@ -244,6 +261,42 @@ const stream = await navigator.mediaDevices.getUserMedia({
       <p>{t("exercise.cameraOff")}</p>
     </div>
   )}
+
+  <div className="exercise-overlay exercise-overlay--top">
+    <div className="exercise-overlay-status">
+      <span
+        className={`exercise-overlay-dot ${
+          isCameraOn ? "exercise-overlay-dot--active" : ""
+        }`}
+      ></span>
+
+      <span>
+        {isCameraOn
+          ? t("exercise.overlayCameraOn")
+          : t("exercise.overlayCameraOff")}
+      </span>
+    </div>
+
+    <div className="exercise-overlay-message">
+      {isStarted ? t("exercise.overlayActive") : t("exercise.overlayReady")}
+    </div>
+  </div>
+
+  <div className="exercise-overlay exercise-overlay--bottom">
+    <div className="exercise-hint-box">
+      <p>{currentHint}</p>
+    </div>
+  </div>
+</div>
+
+<div className="exercise-actions">
+  <button
+    type="button"
+    className="btn btn--secondary"
+    onClick={handleNextHint}
+  >
+    {t("exercise.nextHint")}
+  </button>
 </div>
 
             {cameraError && (

@@ -139,10 +139,20 @@
     "statusActive": "Status: exercise in progress",
     "timerLabel": "Exercise time",
     "fullscreen": "Fullscreen",
-    "cameraStart": "Увімкнути камеру",
-    "cameraStop": "Вимкнути камеру",
-    "cameraOff": "Камера вимкнена. Натисніть кнопку нижче, щоб почати.",
-    "cameraError": "Не вдалося отримати доступ до камери.",
-    "cameraPermission": "Дозвольте доступ до камери у браузері."
+    "cameraStart": "Turn on camera",
+    "cameraStop": "Turn off camera",
+    "cameraOff": "Camera is off. Click the button below to start.",
+    "cameraError": "Failed to access the camera.",
+    "cameraPermission": "Please allow camera access in your browser.",
+    "overlayReady": "System is ready for analysis",
+    "overlayActive": "Perform the exercise and monitor body position",
+    "overlayCameraOn": "Camera is active",
+    "overlayCameraOff": "Camera is off",
+    "hintDefault": "Stand so that your full body is clearly visible.",
+    "hintBackStraight": "Keep your back straight.",
+    "hintRaiseHigher": "Raise your arm a little higher.",
+    "hintSlowDown": "Perform the movement more slowly.",
+    "hintGood": "Good, continue at the same pace.",
+    "nextHint": "Next hint"
   }
 }
