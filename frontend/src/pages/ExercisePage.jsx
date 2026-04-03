@@ -1,103 +1,310 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import {
+  FilesetResolver,
+  PoseLandmarker,
+  DrawingUtils,
+} from "@mediapipe/tasks-vision";
+
 import Header from "../components/Header";
-import { exercises } from "../data/exercises";
-import { createPoseLandmarker } from "../utils/poseLandmarker";
-
-// Збираємо всі вправи в один масив
-const allExercises = Object.values(exercises).flat();
-
-// Простий список з'єднань для малювання скелета
-const LANDMARK_VISIBILITY_THRESHOLD = 0.4;
-const AI_FRAME_INTERVAL_MS = 100;
+import rehabExercises from "../exercises/index.js";
 
 const POSE_CONNECTIONS = [
-  [11, 12], // плечі
+  [11, 12],
   [11, 13],
-  [13, 15], // ліва рука
+  [13, 15],
   [12, 14],
-  [14, 16], // права рука
+  [14, 16],
   [11, 23],
-  [12, 24], // корпус
-  [23, 24], // таз
+  [12, 24],
+  [23, 24],
   [23, 25],
-  [25, 27], // ліва нога
+  [25, 27],
   [24, 26],
-  [26, 28], // права нога
+  [26, 28],
 ];
 
-// Форматування часу
-const formatTime = (totalSeconds) => {
+function formatTime(totalSeconds) {
   const mins = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
   const secs = String(totalSeconds % 60).padStart(2, "0");
   return `${mins}:${secs}`;
-};
+}
 
-function ExercisePage() {
-  const { slug } = useParams();
-  const { t } = useTranslation();
-
-  // Шукаємо вправу по slug
-  const exercise = allExercises.find((item) => item.slug === slug);
-
-  // Знаходимо область вправи
-  let area = null;
-  if (exercise) {
-    for (const [key, exList] of Object.entries(exercises)) {
-      if (exList.some((ex) => ex.slug === slug)) {
-        area = key;
-        break;
-      }
-    }
+function normalizeAnalyzeResult(result) {
+  if (typeof result === "string") {
+    return {
+      message: result,
+      feedback: "",
+      warning: "",
+    };
   }
 
-  // Стан вправи
+  if (result && typeof result === "object") {
+    return {
+      message: result.message || "",
+      feedback: result.feedback || "",
+      warning: result.warning || "",
+    };
+  }
+
+  return {
+    message: "Немає результату аналізу",
+    feedback: "",
+    warning: "",
+  };
+}
+
+function ExercisePageContent({ slug }) {
+  const { t } = useTranslation();
+
+  const exercise = rehabExercises.find((item) => item.id === slug);
+
   const [isStarted, setIsStarted] = useState(false);
   const [seconds, setSeconds] = useState(0);
 
-  // Стан камери
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [cameraError, setCameraError] = useState("");
 
-  // Стан AI
-  const [isAiReady, setIsAiReady] = useState(false);
-  const [aiHint, setAiHint] = useState("");
-  const aiHintRef = useRef("");
+  const [status, setStatus] = useState("Натисни кнопку, щоб увімкнути камеру");
+  const [tip, setTip] = useState("Поки немає аналізу");
+  const [feedback, setFeedback] = useState("Поки немає оцінки");
+  const [warning, setWarning] = useState("");
+  const [isModelReady, setIsModelReady] = useState(false);
 
-  // Тестові підказки
-  const [hintIndex, setHintIndex] = useState(0);
-  const hintKeys = [
-    "exercise.hintDefault",
-    "exercise.hintBackStraight",
-    "exercise.hintRaiseHigher",
-    "exercise.hintSlowDown",
-    "exercise.hintGood",
-  ];
+  const [mainAngle, setMainAngle] = useState(0);
+  const [reps, setReps] = useState(0);
+  const [exerciseStage, setExerciseStage] = useState("start");
 
-  // Ref для DOM та AI
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const cameraSectionRef = useRef(null);
   const poseLandmarkerRef = useRef(null);
   const animationFrameRef = useRef(null);
-
-  // Додаткові refs для стабільної роботи
-  const streamRef = useRef(null);
-  const isAnalyzingRef = useRef(false);
   const lastVideoTimeRef = useRef(-1);
-  const lastAnalyzeCallRef = useRef(0);
-  const lastTimestampMsRef = useRef(0);
+  const streamRef = useRef(null);
+  const stageRef = useRef("start");
 
-  // Безпечні тексти
-  const title = exercise ? t(`exercises.${exercise.key}.title`) : "";
-  const reps = exercise ? t(`exercises.${exercise.key}.reps`) : "";
-  const description = exercise
-    ? t(`exercises.${exercise.key}.description`)
-    : "";
-  const currentHint = t(hintKeys[hintIndex]);
+  const resetExerciseState = () => {
+    stageRef.current = "start";
+    setMainAngle(0);
+    setReps(0);
+    setExerciseStage("start");
+    setTip("Обери вправу та почни рух");
+    setFeedback("Поки немає оцінки");
+    setWarning("");
+  };
 
-  // Таймер вправи
+  const stopAnimationLoop = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+  };
+
+  const stopCameraStream = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  };
+
+  const clearCanvas = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  };
+
+  const analyzeExercise = (landmarks) => {
+    if (!landmarks || landmarks.length === 0) {
+      setMainAngle(0);
+      setExerciseStage("start");
+      stageRef.current = "start";
+
+      return {
+        message: "Людину не знайдено",
+        feedback: "Стань перед камерою повністю",
+        warning: "",
+      };
+    }
+
+    const pose = landmarks[0];
+
+    if (!exercise || typeof exercise.analyze !== "function") {
+      return {
+        message: "Для цієї вправи аналіз недоступний",
+        feedback: "",
+        warning: "",
+      };
+    }
+
+    const rawResult = exercise.analyze({
+      pose,
+      stageRef,
+      setMainAngle,
+      setExerciseStage,
+      setReps,
+    });
+
+    return normalizeAnalyzeResult(rawResult);
+  };
+
+  const predictWebcam = (timestamp) => {
+    if (
+      !poseLandmarkerRef.current ||
+      !videoRef.current ||
+      !canvasRef.current ||
+      videoRef.current.readyState < 2
+    ) {
+      animationFrameRef.current = requestAnimationFrame(predictWebcam);
+      return;
+    }
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+
+    if (
+      canvas.width !== video.videoWidth ||
+      canvas.height !== video.videoHeight
+    ) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    }
+
+    if (lastVideoTimeRef.current !== video.currentTime) {
+      lastVideoTimeRef.current = video.currentTime;
+
+      const results = poseLandmarkerRef.current.detectForVideo(
+        video,
+        timestamp,
+      );
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (results.landmarks && results.landmarks.length > 0) {
+        const drawingUtils = new DrawingUtils(ctx);
+
+        for (const landmarks of results.landmarks) {
+          drawingUtils.drawLandmarks(landmarks, { radius: 4 });
+          drawingUtils.drawConnectors(landmarks, POSE_CONNECTIONS, {
+            lineWidth: 3,
+          });
+        }
+
+        const result = analyzeExercise(results.landmarks);
+        setTip(result.message || "");
+        setFeedback(result.feedback || "");
+        setWarning(result.warning || "");
+      } else {
+        setTip("Стань так, щоб тебе було видно повністю");
+        setFeedback("Очікую правильне положення перед камерою");
+        setWarning("");
+        setMainAngle(0);
+        stageRef.current = "start";
+        setExerciseStage("start");
+      }
+    }
+
+    animationFrameRef.current = requestAnimationFrame(predictWebcam);
+  };
+
+  const startDetection = () => {
+    stopAnimationLoop();
+    animationFrameRef.current = requestAnimationFrame(predictWebcam);
+  };
+
+  const handleStartExercise = () => {
+    setSeconds(0);
+    setIsStarted(true);
+    resetExerciseState();
+  };
+
+  const handleStopExercise = () => {
+    setIsStarted(false);
+  };
+
+  const handleStartCamera = async () => {
+    try {
+      setCameraError("");
+      setStatus("Запит доступу до камери...");
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: 960,
+          height: 540,
+          facingMode: "user",
+        },
+        audio: false,
+      });
+
+      streamRef.current = stream;
+
+      if (!videoRef.current) return;
+
+      videoRef.current.srcObject = stream;
+
+      videoRef.current.onloadedmetadata = async () => {
+        try {
+          if (!videoRef.current) return;
+
+          await videoRef.current.play();
+
+          if (canvasRef.current) {
+            canvasRef.current.width = videoRef.current.videoWidth;
+            canvasRef.current.height = videoRef.current.videoHeight;
+          }
+
+          lastVideoTimeRef.current = -1;
+          stageRef.current = "start";
+
+          setIsCameraOn(true);
+          setExerciseStage("start");
+          setStatus("Камера працює");
+          startDetection();
+        } catch (error) {
+          console.error("Помилка запуску відео:", error);
+          setStatus("Не вдалося запустити відео");
+          setCameraError(t("exercise.cameraError"));
+        }
+      };
+    } catch (error) {
+      console.error("Помилка доступу до камери:", error);
+      setStatus("Немає доступу до камери");
+      setCameraError(t("exercise.cameraError"));
+    }
+  };
+
+  const handleStopCamera = () => {
+    stopAnimationLoop();
+    stopCameraStream();
+    clearCanvas();
+    lastVideoTimeRef.current = -1;
+    setIsCameraOn(false);
+    setStatus("Камеру вимкнено");
+    resetExerciseState();
+  };
+
+  const handleFullscreen = async () => {
+    if (!cameraSectionRef.current) return;
+
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await cameraSectionRef.current.requestFullscreen();
+      }
+    } catch (error) {
+      console.error("Помилка fullscreen:", error);
+    }
+  };
+
   useEffect(() => {
     let interval = null;
 
@@ -114,363 +321,39 @@ function ExercisePage() {
     };
   }, [isStarted]);
 
-  // Очищення canvas
-  const clearCanvas = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-  };
-
-  // Повна зупинка animation frame
-  const stopAnimationLoop = () => {
-    isAnalyzingRef.current = false;
-
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-  };
-
-  // Зупинка потоку камери
-  const stopCameraStream = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-  };
-
-  // Малювання точок
-  const drawLandmarks = (ctx, landmarks, width, height) => {
-    landmarks.forEach((point) => {
-      if (
-        point.visibility !== undefined &&
-        point.visibility < LANDMARK_VISIBILITY_THRESHOLD
-      )
-        return;
-
-      const x = point.x * width;
-      const y = point.y * height;
-
-      ctx.beginPath();
-      ctx.arc(x, y, 5, 0, 2 * Math.PI);
-      ctx.fillStyle = "#22c55e";
-      ctx.fill();
-    });
-  };
-
-  // Малювання ліній скелета
-  const drawSkeleton = (ctx, landmarks, width, height) => {
-    ctx.strokeStyle = "#38bdf8";
-    ctx.lineWidth = 3;
-
-    POSE_CONNECTIONS.forEach(([startIndex, endIndex]) => {
-      const start = landmarks[startIndex];
-      const end = landmarks[endIndex];
-
-      if (!start || !end) return;
-      if (
-        start.visibility !== undefined &&
-        start.visibility < LANDMARK_VISIBILITY_THRESHOLD
-      )
-        return;
-      if (
-        end.visibility !== undefined &&
-        end.visibility < LANDMARK_VISIBILITY_THRESHOLD
-      )
-        return;
-
-      ctx.beginPath();
-      ctx.moveTo(start.x * width, start.y * height);
-      ctx.lineTo(end.x * width, end.y * height);
-      ctx.stroke();
-    });
-  };
-
-  // Малювання всього overlay на canvas
-  const drawPose = (landmarks) => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-
-    if (!video || !canvas) return;
-    if (!video.videoWidth || !video.videoHeight) return;
-
-    const ctx = canvas.getContext("2d");
-
-    if (
-      canvas.width !== video.videoWidth ||
-      canvas.height !== video.videoHeight
-    ) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-    }
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Малюємо скелет і точки
-    drawSkeleton(ctx, landmarks, canvas.width, canvas.height);
-    drawLandmarks(ctx, landmarks, canvas.width, canvas.height);
-  };
-
-  const setHintSafely = (hintText) => {
-    if (aiHintRef.current !== hintText) {
-      aiHintRef.current = hintText;
-      setAiHint(hintText);
-    }
-  };
-
-  const getJointAngle = (a, b, c) => {
-    if (!a || !b || !c) return null;
-
-    const abX = a.x - b.x;
-    const abY = a.y - b.y;
-    const cbX = c.x - b.x;
-    const cbY = c.y - b.y;
-
-    const dot = abX * cbX + abY * cbY;
-    const magAB = Math.hypot(abX, abY);
-    const magCB = Math.hypot(cbX, cbY);
-
-    if (!magAB || !magCB) return null;
-
-    const cosine = Math.min(1, Math.max(-1, dot / (magAB * magCB)));
-    return (Math.acos(cosine) * 180) / Math.PI;
-  };
-
-  const checkArmExercise = (landmarks) => {
-    const rightShoulder = landmarks[12];
-    const rightElbow = landmarks[14];
-    const rightWrist = landmarks[16];
-
-    if (!rightShoulder || !rightElbow || !rightWrist) {
-      return "exercise.hintDefault";
-    }
-
-    if (exercise?.slug === "elbow-flexion") {
-      const elbowAngle = getJointAngle(rightShoulder, rightElbow, rightWrist);
-
-      if (!elbowAngle) return "exercise.hintDefault";
-      if (elbowAngle < 70) return "exercise.hintGood";
-      if (elbowAngle > 145) return "exercise.hintRaiseHigher";
-
-      return "exercise.hintSlowDown";
-    }
-
-    const isWristAboveShoulder = rightWrist.y < rightShoulder.y;
-    return isWristAboveShoulder ? "exercise.hintGood" : "exercise.hintRaiseHigher";
-  };
-
-  // Аналіз кадру
-  const analyzePoseFrame = (rafTime) => {
-    if (!isAnalyzingRef.current) return;
-
-    const video = videoRef.current;
-    const landmarker = poseLandmarkerRef.current;
-
-    if (!video || !landmarker) {
-      animationFrameRef.current = requestAnimationFrame(analyzePoseFrame);
-      return;
-    }
-
-    // Чекаємо, поки відео реально готове
-    if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
-      animationFrameRef.current = requestAnimationFrame(analyzePoseFrame);
-      return;
-    }
-
-    // Обмежуємо частоту аналізу
-    if (rafTime - lastAnalyzeCallRef.current < AI_FRAME_INTERVAL_MS) {
-      animationFrameRef.current = requestAnimationFrame(analyzePoseFrame);
-      return;
-    }
-    lastAnalyzeCallRef.current = rafTime;
-
-    // Якщо кадр не змінився — повторно не аналізуємо
-    if (video.currentTime === lastVideoTimeRef.current) {
-      animationFrameRef.current = requestAnimationFrame(analyzePoseFrame);
-      return;
-    }
-    lastVideoTimeRef.current = video.currentTime;
-
-    try {
-      // Робимо власний timestamp у мілісекундах
-      // і гарантуємо, що він завжди строго більший за попередній
-      const currentVideoMs = Math.floor(video.currentTime * 1000);
-      const timestampMs = Math.max(
-        currentVideoMs,
-        lastTimestampMsRef.current + 1,
-      );
-
-      lastTimestampMsRef.current = timestampMs;
-
-      const result = landmarker.detectForVideo(video, timestampMs);
-
-      if (result?.poseLandmarks?.length > 0) {
-        const landmarks = result.poseLandmarks[0];
-
-        drawPose(landmarks);
-
-        if (area === "arm") {
-          const hintKey = checkArmExercise(landmarks);
-          setHintSafely(t(hintKey));
-        } else {
-          setHintSafely(t("exercise.hintDefault"));
-        }
-      } else {
-        clearCanvas();
-        setHintSafely(t("exercise.hintDefault"));
-      }
-    } catch (error) {
-      setHintSafely(t("exercise.hintDefault"));
-      console.log("Помилка аналізу пози:", error);
-    }
-
-    animationFrameRef.current = requestAnimationFrame(analyzePoseFrame);
-  };
-
-  // Запуск вправи
-  const handleStartExercise = () => {
-    setSeconds(0);
-    setIsStarted(true);
-  };
-
-  // Зупинка вправи
-  const handleStopExercise = () => {
-    setIsStarted(false);
-  };
-
-  // Перемикання тестових підказок
-  const handleNextHint = () => {
-    setHintIndex((prev) => (prev + 1) % hintKeys.length);
-  };
-
-  // Увімкнення камери
-  const handleStartCamera = async () => {
-    try {
-      setCameraError("");
-      setAiHint("");
-      aiHintRef.current = "";
-      setIsAiReady(false);
-
-      stopAnimationLoop();
-      stopCameraStream();
-      clearCanvas();
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          aspectRatio: { ideal: 16 / 9 },
-          facingMode: "user",
-        },
-        audio: false,
-      });
-
-      streamRef.current = stream;
-
-      if (!videoRef.current) return;
-
-      videoRef.current.srcObject = stream;
-
-      await new Promise((resolve) => {
-        const videoElement = videoRef.current;
-
-        if (!videoElement) {
-          resolve();
-          return;
-        }
-
-        if (videoElement.readyState >= HTMLMediaElement.HAVE_METADATA) {
-          resolve();
-          return;
-        }
-
-        videoElement.onloadedmetadata = () => resolve();
-      });
-
-      if (!videoRef.current) return;
-
-      await videoRef.current.play();
-
-      const canvas = canvasRef.current;
-      const video = videoRef.current;
-
-      if (canvas && video) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-
-        const ctx = canvas.getContext("2d");
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-      }
-
-      const landmarker = await createPoseLandmarker();
-      poseLandmarkerRef.current = landmarker;
-
-      lastVideoTimeRef.current = -1;
-      lastAnalyzeCallRef.current = 0;
-      lastTimestampMsRef.current = 0;
-
-      setIsCameraOn(true);
-      setIsAiReady(true);
-
-      isAnalyzingRef.current = true;
-      animationFrameRef.current = requestAnimationFrame(analyzePoseFrame);
-    } catch (error) {
-      console.log("Помилка доступу до камери:", error);
-      setCameraError(t("exercise.cameraError"));
-      setIsCameraOn(false);
-      setIsAiReady(false);
-      aiHintRef.current = "";
-
-      stopAnimationLoop();
-      stopCameraStream();
-      clearCanvas();
-    }
-  };
-
-  // Вимкнення камери
-  const handleStopCamera = () => {
-    stopAnimationLoop();
-    stopCameraStream();
-    clearCanvas();
-
-    poseLandmarkerRef.current = null;
-    lastVideoTimeRef.current = -1;
-    lastAnalyzeCallRef.current = 0;
-    lastTimestampMsRef.current = 0;
-
-    setIsCameraOn(false);
-    setIsAiReady(false);
-    setAiHint("");
-    aiHintRef.current = "";
-  };
-
-  // Повноекранний режим
-  const handleFullscreen = async () => {
-    if (!cameraSectionRef.current) return;
-
-    try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
-      } else {
-        await cameraSectionRef.current.requestFullscreen();
-      }
-    } catch (error) {
-      console.log("Помилка fullscreen:", error);
-    }
-  };
-
-  // При виході зі сторінки все зупиняємо
   useEffect(() => {
+    const initPoseLandmarker = async () => {
+      try {
+        setStatus("Завантаження моделі...");
+
+        const vision = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm",
+        );
+
+        const poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath:
+              "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task",
+          },
+          runningMode: "VIDEO",
+          numPoses: 1,
+        });
+
+        poseLandmarkerRef.current = poseLandmarker;
+        setIsModelReady(true);
+        setStatus("Модель готова");
+      } catch (error) {
+        console.error("Помилка завантаження моделі:", error);
+        setStatus("Не вдалося завантажити модель");
+        setCameraError("Не вдалося завантажити модель AI");
+      }
+    };
+
+    initPoseLandmarker();
+
     return () => {
       stopAnimationLoop();
       stopCameraStream();
-      poseLandmarkerRef.current = null;
     };
   }, []);
 
@@ -507,11 +390,15 @@ function ExercisePage() {
           <section className="exercise-main-card">
             <p className="exercise-label">{t("exercise.label")}</p>
 
-            <h1>{title}</h1>
+            <h1>{exercise.name}</h1>
 
-            <p className="exercise-reps">{reps}</p>
+            <p className="exercise-reps">
+              {t("exercise.timerLabel")}: {formatTime(seconds)}
+            </p>
 
-            <p className="exercise-description">{description}</p>
+            <p className="exercise-description">
+              {t("exercise.tipText")}
+            </p>
 
             <div className="exercise-status-box">
               <p>
@@ -521,7 +408,24 @@ function ExercisePage() {
               </p>
 
               <p>
-                {t("exercise.timerLabel")}: {formatTime(seconds)}
+                <strong>Статус AI:</strong> {status}
+              </p>
+
+              <p>
+                <strong>Модель:</strong>{" "}
+                {isModelReady ? "готова до роботи" : "ще завантажується"}
+              </p>
+
+              <p>
+                <strong>Основний кут:</strong> {mainAngle}°
+              </p>
+
+              <p>
+                <strong>Повторення:</strong> {reps}
+              </p>
+
+              <p>
+                <strong>Етап вправи:</strong> {exerciseStage}
               </p>
             </div>
 
@@ -607,27 +511,18 @@ function ExercisePage() {
 
               <div className="exercise-overlay exercise-overlay--bottom">
                 <div className="exercise-hint-box">
-                  <p>{aiHint || currentHint}</p>
+                  <p>{tip || "Поки немає аналізу"}</p>
 
-                  {isCameraOn && (
-                    <small className="exercise-ai-status">
-                      {isAiReady
-                        ? t("exercise.aiReady")
-                        : t("exercise.aiLoading")}
-                    </small>
+                  <small className="exercise-ai-status">
+                    {feedback ||
+                      (isModelReady ? "AI готовий" : "AI завантажується")}
+                  </small>
+
+                  {!!warning && (
+                    <small className="exercise-ai-status">{warning}</small>
                   )}
                 </div>
               </div>
-            </div>
-
-            <div className="exercise-actions">
-              <button
-                type="button"
-                className="btn btn--secondary"
-                onClick={handleNextHint}
-              >
-                {t("exercise.nextHint")}
-              </button>
             </div>
 
             {cameraError && (
@@ -643,6 +538,7 @@ function ExercisePage() {
                   type="button"
                   className="btn btn--primary"
                   onClick={handleStartCamera}
+                  disabled={!isModelReady}
                 >
                   {t("exercise.cameraStart")}
                 </button>
@@ -659,13 +555,27 @@ function ExercisePage() {
 
             <div className="exercise-tip-box">
               <h3>{t("exercise.tipTitle")}</h3>
-              <p>{t("exercise.tipText")}</p>
+              <p>
+                <strong>Вправа:</strong> {exercise.name}
+              </p>
+              <p>
+                <strong>Оцінка руху:</strong> {feedback || "ще немає"}
+              </p>
+              <p>
+                <strong>Попередження:</strong> {warning || "немає"}
+              </p>
             </div>
           </section>
         </div>
       </main>
     </>
   );
+}
+
+function ExercisePage() {
+  const { slug } = useParams();
+
+  return <ExercisePageContent key={slug} slug={slug} />;
 }
 
 export default ExercisePage;
