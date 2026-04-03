@@ -1081,3 +1081,100 @@ a {
     max-width: 100%;
   }
 }
+
+
+/* =========================
+   Workout session UI fixes
+   ========================= */
+
+.exercise-back-link--ui {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background-color: var(--color-white);
+  color: var(--color-primary);
+  font-weight: 700;
+  box-shadow: var(--shadow-main);
+  transition: all 0.25s ease;
+}
+
+.exercise-back-link--ui:hover {
+  background-color: var(--color-soft);
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
+}
+
+.workout-reps-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background-color: #f8fbff;
+  border: 1px solid #d7e4ff;
+}
+
+.workout-reps-btn {
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 12px;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.workout-reps-input {
+  width: 84px;
+  height: 44px;
+  border: 1px solid #bfd2f5;
+  border-radius: 12px;
+  background-color: var(--color-white);
+  color: var(--color-dark);
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  outline: none;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.workout-reps-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+.workout-reps-input:disabled {
+  background-color: #f3f6fb;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+.exercise-actions--camera {
+  margin-top: 28px;
+  margin-bottom: 24px;
+}
+.dashboard-section,
+.dashboard-exercises {
+  margin-bottom: 40px;
+}
+
+@media (max-width: 768px) {
+  .workout-reps-control {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .workout-reps-input {
+    width: 72px;
+  }
+
+  .exercise-back-link--ui {
+    width: 100%;
+    justify-content: center;
+  }
+}

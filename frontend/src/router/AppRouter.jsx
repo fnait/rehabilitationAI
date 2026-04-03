@@ -3,6 +3,7 @@ import HomePage from "../pages/HomePage";
 import DashboardPage from "../pages/DashboardPage";
 import ExercisePage from "../pages/ExercisePage";
 import ProtectedRoute from "../components/ProtectedRoute";
+import WorkoutSessionPage from "../pages/WorkoutSessionPage";
 
 function AppRouter() {
   return (
@@ -23,6 +24,15 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <ExercisePage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/workout/:slug"
+        element={
+          <ProtectedRoute>
+            <WorkoutSessionPage />
           </ProtectedRoute>
         }
       />

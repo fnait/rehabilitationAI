@@ -5,6 +5,7 @@ import { useAuth } from "../context/useAuth";
 import Header from "../components/Header";
 import bodyParts from "../data/bodyParts";
 import rehabExercises from "../exercises/index.js";
+import workouts from "../data/workouts/index.js";
 
 function DashboardPage() {
   const { t } = useTranslation();
@@ -36,6 +37,24 @@ function DashboardPage() {
             <p className="dashboard-text">{t("dashboard.description")}</p>
           </div>
 
+          <section className="dashboard-exercises">
+            <h2 className="dashboard-section-title">Готові заняття</h2>
+
+            <div className="dashboard-grid">
+              {workouts.map((workout) => (
+                <Link
+                  key={workout.id}
+                  to={`/workout/${workout.id}`}
+                  className="dashboard-card dashboard-card-link"
+                >
+                  <h3>{workout.name}</h3>
+                  <p>{workout.description}</p>
+                  <p>Вправ у занятті: {workout.exercises.length}</p>
+                </Link>
+              ))}
+            </div>
+          </section>
+
           <section className="dashboard-section">
             <h2 className="dashboard-section-title">
               {t("dashboard.sectionTitle")}
@@ -55,8 +74,7 @@ function DashboardPage() {
                 >
                   <h3>{part.name}</h3>
                   <p>
-                    {t("dashboard.selectedNote")}{" "}
-                    {part.exercises.length}
+                    {t("dashboard.selectedNote")} {part.exercises.length}
                   </p>
                 </button>
               ))}

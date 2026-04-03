@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -9,6 +9,7 @@ import {
 
 import Header from "../components/Header";
 import rehabExercises from "../exercises/index.js";
+import workouts from "../data/workouts/index.js";
 
 const POSE_CONNECTIONS = [
   [11, 12],
@@ -55,12 +56,19 @@ function normalizeAnalyzeResult(result) {
   };
 }
 
-function ExercisePageContent({ slug }) {
+function WorkoutSessionPageContent({ slug }) {
   const { t } = useTranslation();
 
-  const exercise = rehabExercises.find((item) => item.id === slug);
+  const workout = workouts.find((item) => item.id === slug);
 
-  const [isStarted, setIsStarted] = useState(false);
+  const [editableSteps, setEditableSteps] = useState(
+    () => workout?.exercises?.map((step) => ({ ...step })) || [],
+  );
+
+  const [isWorkoutStarted, setIsWorkoutStarted] = useState(false);
+  const [isWorkoutCompleted, setIsWorkoutCompleted] = useState(false);
+  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
+
   const [seconds, setSeconds] = useState(0);
 
   const [isCameraOn, setIsCameraOn] = useState(false);
@@ -85,15 +93,59 @@ function ExercisePageContent({ slug }) {
   const streamRef = useRef(null);
   const stageRef = useRef("start");
 
-  const resetExerciseState = () => {
+  const currentStep = editableSteps[currentExerciseIndex] || null;
+
+  const currentExercise = useMemo(() => {
+    if (!currentStep) return null;
+
+    return rehabExercises.find((item) => item.id === currentStep.exerciseId);
+  }, [currentStep]);
+
+  const totalExercises = editableSteps.length;
+  const totalTargetReps = editableSteps.reduce(
+    (sum, item) => sum + (Number(item.reps) || 0),
+    0,
+  );
+  const completedTargetReps = editableSteps
+    .slice(0, currentExerciseIndex)
+    .reduce((sum, item) => sum + (Number(item.reps) || 0), 0);
+
+  const resetCurrentExerciseState = useCallback(() => {
     stageRef.current = "start";
     setMainAngle(0);
     setReps(0);
     setExerciseStage("start");
-    setTip("Обери вправу та почни рух");
+    setTip("Стань перед камерою і почни рух");
     setFeedback("Поки немає оцінки");
     setWarning("");
-  };
+  }, []);
+
+  const finishWorkout = useCallback(() => {
+    setIsWorkoutCompleted(true);
+    setIsWorkoutStarted(false);
+    setTip("Заняття завершено");
+    setFeedback("Усі вправи виконано");
+    setWarning("");
+  }, []);
+
+  const goToNextExercise = useCallback(() => {
+    const isLastExercise = currentExerciseIndex >= editableSteps.length - 1;
+
+    if (isLastExercise) {
+      finishWorkout();
+      return;
+    }
+
+    setCurrentExerciseIndex((prev) => prev + 1);
+
+    stageRef.current = "start";
+    setMainAngle(0);
+    setReps(0);
+    setExerciseStage("start");
+    setTip("Стань перед камерою і почни рух");
+    setFeedback("Поки немає оцінки");
+    setWarning("");
+  }, [currentExerciseIndex, editableSteps.length, finishWorkout]);
 
   const stopAnimationLoop = () => {
     if (animationFrameRef.current) {
@@ -121,6 +173,36 @@ function ExercisePageContent({ slug }) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   };
 
+  const updateStepReps = (index, value) => {
+    setEditableSteps((prev) =>
+      prev.map((step, stepIndex) =>
+        stepIndex === index
+          ? { ...step, reps: Math.max(1, Number(value) || 1) }
+          : step,
+      ),
+    );
+  };
+
+  const decreaseStepReps = (index) => {
+    setEditableSteps((prev) =>
+      prev.map((step, stepIndex) =>
+        stepIndex === index
+          ? { ...step, reps: Math.max(1, Number(step.reps) - 1) }
+          : step,
+      ),
+    );
+  };
+
+  const increaseStepReps = (index) => {
+    setEditableSteps((prev) =>
+      prev.map((step, stepIndex) =>
+        stepIndex === index
+          ? { ...step, reps: Math.max(1, Number(step.reps) + 1) }
+          : step,
+      ),
+    );
+  };
+
   const analyzeExercise = (landmarks) => {
     if (!landmarks || landmarks.length === 0) {
       setMainAngle(0);
@@ -136,7 +218,7 @@ function ExercisePageContent({ slug }) {
 
     const pose = landmarks[0];
 
-    if (!exercise || typeof exercise.analyze !== "function") {
+    if (!currentExercise || typeof currentExercise.analyze !== "function") {
       return {
         message: "Для цієї вправи аналіз недоступний",
         feedback: "",
@@ -144,7 +226,7 @@ function ExercisePageContent({ slug }) {
       };
     }
 
-    const rawResult = exercise.analyze({
+    const rawResult = currentExercise.analyze({
       pose,
       stageRef,
       setMainAngle,
@@ -220,14 +302,16 @@ function ExercisePageContent({ slug }) {
     animationFrameRef.current = requestAnimationFrame(predictWebcam);
   };
 
-  const handleStartExercise = () => {
+  const handleStartWorkout = () => {
     setSeconds(0);
-    setIsStarted(true);
-    resetExerciseState();
+    setCurrentExerciseIndex(0);
+    setIsWorkoutStarted(true);
+    setIsWorkoutCompleted(false);
+    resetCurrentExerciseState();
   };
 
-  const handleStopExercise = () => {
-    setIsStarted(false);
+  const handleStopWorkout = () => {
+    setIsWorkoutStarted(false);
   };
 
   const handleStartCamera = async () => {
@@ -288,7 +372,7 @@ function ExercisePageContent({ slug }) {
     lastVideoTimeRef.current = -1;
     setIsCameraOn(false);
     setStatus("Камеру вимкнено");
-    resetExerciseState();
+    resetCurrentExerciseState();
   };
 
   const handleFullscreen = async () => {
@@ -308,7 +392,7 @@ function ExercisePageContent({ slug }) {
   useEffect(() => {
     let interval = null;
 
-    if (isStarted) {
+    if (isWorkoutStarted && !isWorkoutCompleted) {
       interval = setInterval(() => {
         setSeconds((prev) => prev + 1);
       }, 1000);
@@ -319,7 +403,7 @@ function ExercisePageContent({ slug }) {
         clearInterval(interval);
       }
     };
-  }, [isStarted]);
+  }, [isWorkoutStarted, isWorkoutCompleted]);
 
   useEffect(() => {
     const initPoseLandmarker = async () => {
@@ -357,14 +441,31 @@ function ExercisePageContent({ slug }) {
     };
   }, []);
 
-  if (!exercise) {
+  useEffect(() => {
+    if (!isWorkoutStarted || isWorkoutCompleted || !currentStep) return;
+    if (reps < currentStep.reps) return;
+
+    const timeout = setTimeout(() => {
+      goToNextExercise();
+    }, 1200);
+
+    return () => clearTimeout(timeout);
+  }, [
+    reps,
+    currentStep,
+    isWorkoutStarted,
+    isWorkoutCompleted,
+    goToNextExercise,
+  ]);
+
+  if (!workout) {
     return (
       <>
         <Header />
         <main className="exercise-page">
           <div className="container">
             <div className="exercise-not-found">
-              <h1>Вправу не знайдено</h1>
+              <h1>Заняття не знайдено</h1>
               <Link to="/dashboard" className="btn btn--primary">
                 Повернутися в кабінет
               </Link>
@@ -391,23 +492,35 @@ function ExercisePageContent({ slug }) {
           </div>
 
           <section className="exercise-main-card">
-            <p className="exercise-label">{t("exercise.label")}</p>
+            <p className="exercise-label">Готове заняття</p>
 
-            <h1>{exercise.name}</h1>
+            <h1>{workout.name}</h1>
 
-            <p className="exercise-reps">
-              {t("exercise.timerLabel")}: {formatTime(seconds)}
-            </p>
+            <p className="exercise-description">{workout.description}</p>
 
-            <p className="exercise-description">
-              {t("exercise.tipText")}
-            </p>
+            <p className="exercise-reps">Час заняття: {formatTime(seconds)}</p>
 
             <div className="exercise-status-box">
               <p>
-                {isStarted
-                  ? t("exercise.statusActive")
-                  : t("exercise.statusReady")}
+                <strong>Поточна вправа:</strong> {currentExercise?.name || "—"}
+              </p>
+
+              <p>
+                <strong>Крок:</strong> {currentExerciseIndex + 1} /{" "}
+                {totalExercises}
+              </p>
+
+              <p>
+                <strong>Ціль повторень:</strong> {currentStep?.reps || 0}
+              </p>
+
+              <p>
+                <strong>Виконано повторень:</strong> {reps}
+              </p>
+
+              <p>
+                <strong>Загальний обсяг:</strong> {completedTargetReps + reps} /{" "}
+                {totalTargetReps}
               </p>
 
               <p>
@@ -424,32 +537,101 @@ function ExercisePageContent({ slug }) {
               </p>
 
               <p>
-                <strong>Повторення:</strong> {reps}
+                <strong>Етап вправи:</strong> {exerciseStage}
               </p>
 
               <p>
-                <strong>Етап вправи:</strong> {exerciseStage}
+                <strong>Стан заняття:</strong>{" "}
+                {isWorkoutCompleted
+                  ? "завершено"
+                  : isWorkoutStarted
+                    ? "активне"
+                    : "готове до старту"}
               </p>
             </div>
 
             <div className="exercise-actions">
-              {!isStarted ? (
+              {!isWorkoutStarted && !isWorkoutCompleted ? (
                 <button
                   type="button"
                   className="btn btn--primary"
-                  onClick={handleStartExercise}
+                  onClick={handleStartWorkout}
                 >
-                  {t("exercise.start")}
+                  Розпочати заняття
                 </button>
-              ) : (
+              ) : null}
+
+              {isWorkoutStarted ? (
                 <button
                   type="button"
                   className="btn btn--secondary"
-                  onClick={handleStopExercise}
+                  onClick={handleStopWorkout}
                 >
-                  {t("exercise.stop")}
+                  Зупинити заняття
                 </button>
-              )}
+              ) : null}
+            </div>
+          </section>
+
+          <section className="exercise-main-card">
+            <p className="exercise-label">Плейлист вправ</p>
+
+            <div className="dashboard-grid">
+              {editableSteps.map((step, index) => {
+                const stepExercise = rehabExercises.find(
+                  (item) => item.id === step.exerciseId,
+                );
+
+                const isActive = index === currentExerciseIndex;
+                const isDone = index < currentExerciseIndex;
+
+                return (
+                  <div
+                    key={`${step.exerciseId}-${index}`}
+                    className={`dashboard-card ${
+                      isActive ? "dashboard-card--active" : ""
+                    }`}
+                  >
+                    <h3>{stepExercise?.name || step.exerciseId}</h3>
+
+                    <p>ID: {step.exerciseId}</p>
+
+                    <p>
+                      Статус:{" "}
+                      {isDone ? "виконано" : isActive ? "поточна" : "очікує"}
+                    </p>
+
+                    <div className="workout-reps-control">
+                      <button
+                        type="button"
+                        className="btn btn--secondary workout-reps-btn"
+                        onClick={() => decreaseStepReps(index)}
+                        disabled={isWorkoutStarted}
+                      >
+                        -
+                      </button>
+
+                      <input
+                        type="number"
+                        min="1"
+                        value={step.reps}
+                        onChange={(e) => updateStepReps(index, e.target.value)}
+                        disabled={isWorkoutStarted}
+                        className="workout-reps-input"
+                      />
+
+                      <button
+                        type="button"
+                        className="btn btn--secondary workout-reps-btn"
+                        onClick={() => increaseStepReps(index)}
+                        disabled={isWorkoutStarted}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </section>
 
@@ -506,9 +688,11 @@ function ExercisePageContent({ slug }) {
                 </div>
 
                 <div className="exercise-overlay-message">
-                  {isStarted
-                    ? t("exercise.overlayActive")
-                    : t("exercise.overlayReady")}
+                  {isWorkoutCompleted
+                    ? "Заняття завершено"
+                    : isWorkoutStarted
+                      ? `Зараз виконується: ${currentExercise?.name || "—"}`
+                      : "Готово до старту"}
                 </div>
               </div>
 
@@ -535,7 +719,7 @@ function ExercisePageContent({ slug }) {
               </div>
             )}
 
-            <div className="exercise-actions">
+            <div className="exercise-actions exercise-actions--camera">
               {!isCameraOn ? (
                 <button
                   type="button"
@@ -558,12 +742,19 @@ function ExercisePageContent({ slug }) {
 
             <div className="exercise-tip-box">
               <h3>{t("exercise.tipTitle")}</h3>
+
               <p>
-                <strong>Вправа:</strong> {exercise.name}
+                <strong>Заняття:</strong> {workout.name}
               </p>
+
+              <p>
+                <strong>Поточна вправа:</strong> {currentExercise?.name || "—"}
+              </p>
+
               <p>
                 <strong>Оцінка руху:</strong> {feedback || "ще немає"}
               </p>
+
               <p>
                 <strong>Попередження:</strong> {warning || "немає"}
               </p>
@@ -575,10 +766,10 @@ function ExercisePageContent({ slug }) {
   );
 }
 
-function ExercisePage() {
+function WorkoutSessionPage() {
   const { slug } = useParams();
 
-  return <ExercisePageContent key={slug} slug={slug} />;
+  return <WorkoutSessionPageContent key={slug} slug={slug} />;
 }
 
-export default ExercisePage;
+export default WorkoutSessionPage;
