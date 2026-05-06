@@ -52,6 +52,8 @@ function WorkoutSessionPageContent({ slug }) {
   const [seconds, setSeconds] = useState(0);
 
   const cameraSectionRef = useRef(null);
+  const isChangingExerciseRef = useRef(false);
+  const changeExerciseTimeoutRef = useRef(null);
 
   const currentStep = editableSteps[currentExerciseIndex] || null;
 
@@ -196,6 +198,13 @@ function WorkoutSessionPageContent({ slug }) {
 
 
   const handleStartWorkout = () => {
+    // Нове заняття: скидаємо блок переходу між вправами
+    isChangingExerciseRef.current = false;
+    if (changeExerciseTimeoutRef.current) {
+      clearTimeout(changeExerciseTimeoutRef.current);
+      changeExerciseTimeoutRef.current = null;
+    }
+
     setSeconds(0);
     setCurrentExerciseIndex(0);
     setIsWorkoutStarted(true);
@@ -204,6 +213,11 @@ function WorkoutSessionPageContent({ slug }) {
   };
 
   const handleStopWorkout = () => {
+    isChangingExerciseRef.current = false;
+    if (changeExerciseTimeoutRef.current) {
+      clearTimeout(changeExerciseTimeoutRef.current);
+      changeExerciseTimeoutRef.current = null;
+    }
     setIsWorkoutStarted(false);
   };
 
@@ -247,14 +261,21 @@ function WorkoutSessionPageContent({ slug }) {
   }, [isWorkoutStarted, isWorkoutCompleted]);
 
   useEffect(() => {
-    if (!isWorkoutStarted || isWorkoutCompleted || !currentStep) return;
-    if (reps < currentStep.reps) return;
+    if (!isWorkoutStarted) return;
+    if (isWorkoutCompleted) return;
+    if (!currentStep) return;
+    if (reps < Number(currentStep.reps)) return;
+    if (isChangingExerciseRef.current) return;
 
-    const timeout = setTimeout(() => {
+    // Фіксуємо, що перехід уже запущено, щоб не скидався через часті оновлення з камери
+    isChangingExerciseRef.current = true;
+    changeExerciseTimeoutRef.current = setTimeout(() => {
       goToNextExercise();
+      isChangingExerciseRef.current = false;
+      changeExerciseTimeoutRef.current = null;
     }, 1200);
 
-    return () => clearTimeout(timeout);
+    return undefined;
   }, [
     reps,
     currentStep,
@@ -262,6 +283,14 @@ function WorkoutSessionPageContent({ slug }) {
     isWorkoutCompleted,
     goToNextExercise,
   ]);
+
+  useEffect(() => {
+    return () => {
+      if (changeExerciseTimeoutRef.current) {
+        clearTimeout(changeExerciseTimeoutRef.current);
+      }
+    };
+  }, []);
 
   if (!workout) {
     return (
