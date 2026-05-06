@@ -308,6 +308,14 @@ a {
   margin-top: 20px;
 }
 
+
+/* Невеликий стиль для рядка з версією у футері */
+.footer-version {
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--color-border);
+}
+
 /* Авторизація */
 .auth-page {
   min-height: 100vh;
