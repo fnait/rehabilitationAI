@@ -1,30 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import {
-  FilesetResolver,
-  PoseLandmarker,
-  DrawingUtils,
-} from "@mediapipe/tasks-vision";
-
 import Header from "../components/Header";
 import rehabExercises from "../exercises/index.js";
 import workouts from "../data/workouts/index.js";
-
-const POSE_CONNECTIONS = [
-  [11, 12],
-  [11, 13],
-  [13, 15],
-  [12, 14],
-  [14, 16],
-  [11, 23],
-  [12, 24],
-  [23, 24],
-  [23, 25],
-  [25, 27],
-  [24, 26],
-  [26, 28],
-];
+import usePoseDetection from "../hooks/usePoseDetection";
 
 function formatTime(totalSeconds) {
   const mins = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
@@ -71,27 +51,9 @@ function WorkoutSessionPageContent({ slug }) {
 
   const [seconds, setSeconds] = useState(0);
 
-  const [isCameraOn, setIsCameraOn] = useState(false);
-  const [cameraError, setCameraError] = useState("");
-
-  const [status, setStatus] = useState("Натисни кнопку, щоб увімкнути камеру");
-  const [tip, setTip] = useState("Поки немає аналізу");
-  const [feedback, setFeedback] = useState("Поки немає оцінки");
-  const [warning, setWarning] = useState("");
-  const [isModelReady, setIsModelReady] = useState(false);
-
-  const [mainAngle, setMainAngle] = useState(0);
-  const [reps, setReps] = useState(0);
-  const [exerciseStage, setExerciseStage] = useState("start");
-
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
   const cameraSectionRef = useRef(null);
-  const poseLandmarkerRef = useRef(null);
-  const animationFrameRef = useRef(null);
-  const lastVideoTimeRef = useRef(-1);
-  const streamRef = useRef(null);
-  const stageRef = useRef("start");
+  const isChangingExerciseRef = useRef(false);
+  const changeExerciseTimeoutRef = useRef(null);
 
   const currentStep = editableSteps[currentExerciseIndex] || null;
 
@@ -100,6 +62,68 @@ function WorkoutSessionPageContent({ slug }) {
 
     return rehabExercises.find((item) => item.id === currentStep.exerciseId);
   }, [currentStep]);
+
+  // Аналізуємо позу саме для поточної вправи в занятті
+  const analyzePose = useCallback(
+    ({ landmarks, stageRef, setMainAngle, setExerciseStage, setReps }) => {
+      if (!landmarks || landmarks.length === 0) {
+        setMainAngle(0);
+        setExerciseStage("start");
+        stageRef.current = "start";
+
+        return {
+          message: "Людину не знайдено",
+          feedback: "Стань перед камерою повністю",
+          warning: "",
+        };
+      }
+
+      const pose = landmarks[0];
+
+      if (!currentExercise || typeof currentExercise.analyze !== "function") {
+        return {
+          message: "Для цієї вправи аналіз недоступний",
+          feedback: "",
+          warning: "",
+        };
+      }
+
+      const rawResult = currentExercise.analyze({
+        pose,
+        stageRef,
+        setMainAngle,
+        setExerciseStage,
+        setReps,
+      });
+
+      return normalizeAnalyzeResult(rawResult);
+    },
+    [currentExercise],
+  );
+
+  const {
+    videoRef,
+    canvasRef,
+    isCameraOn,
+    cameraError,
+    status,
+    tip,
+    feedback,
+    warning,
+    isModelReady,
+    mainAngle,
+    reps,
+    exerciseStage,
+    setTip,
+    setFeedback,
+    setWarning,
+    startCamera,
+    stopCamera,
+    resetPoseState,
+  } = usePoseDetection({
+    analyzePose,
+    cameraErrorText: t("exercise.cameraError"),
+  });
 
   const totalExercises = editableSteps.length;
   const totalTargetReps = editableSteps.reduce(
@@ -110,15 +134,11 @@ function WorkoutSessionPageContent({ slug }) {
     .slice(0, currentExerciseIndex)
     .reduce((sum, item) => sum + (Number(item.reps) || 0), 0);
 
+  // Скидаємо стан аналізу, коли стартуємо/перемикаємо вправу
   const resetCurrentExerciseState = useCallback(() => {
-    stageRef.current = "start";
-    setMainAngle(0);
-    setReps(0);
-    setExerciseStage("start");
+    resetPoseState();
     setTip("Стань перед камерою і почни рух");
-    setFeedback("Поки немає оцінки");
-    setWarning("");
-  }, []);
+  }, [resetPoseState, setTip]);
 
   const finishWorkout = useCallback(() => {
     setIsWorkoutCompleted(true);
@@ -126,7 +146,7 @@ function WorkoutSessionPageContent({ slug }) {
     setTip("Заняття завершено");
     setFeedback("Усі вправи виконано");
     setWarning("");
-  }, []);
+  }, [setFeedback, setTip, setWarning]);
 
   const goToNextExercise = useCallback(() => {
     const isLastExercise = currentExerciseIndex >= editableSteps.length - 1;
@@ -137,42 +157,15 @@ function WorkoutSessionPageContent({ slug }) {
     }
 
     setCurrentExerciseIndex((prev) => prev + 1);
+    resetCurrentExerciseState();
+  }, [
+    currentExerciseIndex,
+    editableSteps.length,
+    finishWorkout,
+    resetCurrentExerciseState,
+  ]);
 
-    stageRef.current = "start";
-    setMainAngle(0);
-    setReps(0);
-    setExerciseStage("start");
-    setTip("Стань перед камерою і почни рух");
-    setFeedback("Поки немає оцінки");
-    setWarning("");
-  }, [currentExerciseIndex, editableSteps.length, finishWorkout]);
-
-  const stopAnimationLoop = () => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-  };
-
-  const stopCameraStream = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-  };
-
-  const clearCanvas = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-  };
-
+  // Даємо змогу змінювати повторення до старту тренування
   const updateStepReps = (index, value) => {
     setEditableSteps((prev) =>
       prev.map((step, stepIndex) =>
@@ -203,106 +196,15 @@ function WorkoutSessionPageContent({ slug }) {
     );
   };
 
-  const analyzeExercise = (landmarks) => {
-    if (!landmarks || landmarks.length === 0) {
-      setMainAngle(0);
-      setExerciseStage("start");
-      stageRef.current = "start";
-
-      return {
-        message: "Людину не знайдено",
-        feedback: "Стань перед камерою повністю",
-        warning: "",
-      };
-    }
-
-    const pose = landmarks[0];
-
-    if (!currentExercise || typeof currentExercise.analyze !== "function") {
-      return {
-        message: "Для цієї вправи аналіз недоступний",
-        feedback: "",
-        warning: "",
-      };
-    }
-
-    const rawResult = currentExercise.analyze({
-      pose,
-      stageRef,
-      setMainAngle,
-      setExerciseStage,
-      setReps,
-    });
-
-    return normalizeAnalyzeResult(rawResult);
-  };
-
-  const predictWebcam = (timestamp) => {
-    if (
-      !poseLandmarkerRef.current ||
-      !videoRef.current ||
-      !canvasRef.current ||
-      videoRef.current.readyState < 2
-    ) {
-      animationFrameRef.current = requestAnimationFrame(predictWebcam);
-      return;
-    }
-
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-
-    if (
-      canvas.width !== video.videoWidth ||
-      canvas.height !== video.videoHeight
-    ) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-    }
-
-    if (lastVideoTimeRef.current !== video.currentTime) {
-      lastVideoTimeRef.current = video.currentTime;
-
-      const results = poseLandmarkerRef.current.detectForVideo(
-        video,
-        timestamp,
-      );
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      if (results.landmarks && results.landmarks.length > 0) {
-        const drawingUtils = new DrawingUtils(ctx);
-
-        for (const landmarks of results.landmarks) {
-          drawingUtils.drawLandmarks(landmarks, { radius: 4 });
-          drawingUtils.drawConnectors(landmarks, POSE_CONNECTIONS, {
-            lineWidth: 3,
-          });
-        }
-
-        const result = analyzeExercise(results.landmarks);
-        setTip(result.message || "");
-        setFeedback(result.feedback || "");
-        setWarning(result.warning || "");
-      } else {
-        setTip("Стань так, щоб тебе було видно повністю");
-        setFeedback("Очікую правильне положення перед камерою");
-        setWarning("");
-        setMainAngle(0);
-        stageRef.current = "start";
-        setExerciseStage("start");
-      }
-    }
-
-    animationFrameRef.current = requestAnimationFrame(predictWebcam);
-  };
-
-  const startDetection = () => {
-    stopAnimationLoop();
-    animationFrameRef.current = requestAnimationFrame(predictWebcam);
-  };
 
   const handleStartWorkout = () => {
+    // Нове заняття: скидаємо блок переходу між вправами
+    isChangingExerciseRef.current = false;
+    if (changeExerciseTimeoutRef.current) {
+      clearTimeout(changeExerciseTimeoutRef.current);
+      changeExerciseTimeoutRef.current = null;
+    }
+
     setSeconds(0);
     setCurrentExerciseIndex(0);
     setIsWorkoutStarted(true);
@@ -311,67 +213,20 @@ function WorkoutSessionPageContent({ slug }) {
   };
 
   const handleStopWorkout = () => {
+    isChangingExerciseRef.current = false;
+    if (changeExerciseTimeoutRef.current) {
+      clearTimeout(changeExerciseTimeoutRef.current);
+      changeExerciseTimeoutRef.current = null;
+    }
     setIsWorkoutStarted(false);
   };
 
   const handleStartCamera = async () => {
-    try {
-      setCameraError("");
-      setStatus("Запит доступу до камери...");
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: 960,
-          height: 540,
-          facingMode: "user",
-        },
-        audio: false,
-      });
-
-      streamRef.current = stream;
-
-      if (!videoRef.current) return;
-
-      videoRef.current.srcObject = stream;
-
-      videoRef.current.onloadedmetadata = async () => {
-        try {
-          if (!videoRef.current) return;
-
-          await videoRef.current.play();
-
-          if (canvasRef.current) {
-            canvasRef.current.width = videoRef.current.videoWidth;
-            canvasRef.current.height = videoRef.current.videoHeight;
-          }
-
-          lastVideoTimeRef.current = -1;
-          stageRef.current = "start";
-
-          setIsCameraOn(true);
-          setExerciseStage("start");
-          setStatus("Камера працює");
-          startDetection();
-        } catch (error) {
-          console.error("Помилка запуску відео:", error);
-          setStatus("Не вдалося запустити відео");
-          setCameraError(t("exercise.cameraError"));
-        }
-      };
-    } catch (error) {
-      console.error("Помилка доступу до камери:", error);
-      setStatus("Немає доступу до камери");
-      setCameraError(t("exercise.cameraError"));
-    }
+    await startCamera();
   };
 
   const handleStopCamera = () => {
-    stopAnimationLoop();
-    stopCameraStream();
-    clearCanvas();
-    lastVideoTimeRef.current = -1;
-    setIsCameraOn(false);
-    setStatus("Камеру вимкнено");
+    stopCamera();
     resetCurrentExerciseState();
   };
 
@@ -406,50 +261,21 @@ function WorkoutSessionPageContent({ slug }) {
   }, [isWorkoutStarted, isWorkoutCompleted]);
 
   useEffect(() => {
-    const initPoseLandmarker = async () => {
-      try {
-        setStatus("Завантаження моделі...");
+    if (!isWorkoutStarted) return;
+    if (isWorkoutCompleted) return;
+    if (!currentStep) return;
+    if (reps < Number(currentStep.reps)) return;
+    if (isChangingExerciseRef.current) return;
 
-        const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm",
-        );
-
-        const poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath:
-              "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task",
-          },
-          runningMode: "VIDEO",
-          numPoses: 1,
-        });
-
-        poseLandmarkerRef.current = poseLandmarker;
-        setIsModelReady(true);
-        setStatus("Модель готова");
-      } catch (error) {
-        console.error("Помилка завантаження моделі:", error);
-        setStatus("Не вдалося завантажити модель");
-        setCameraError("Не вдалося завантажити модель AI");
-      }
-    };
-
-    initPoseLandmarker();
-
-    return () => {
-      stopAnimationLoop();
-      stopCameraStream();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isWorkoutStarted || isWorkoutCompleted || !currentStep) return;
-    if (reps < currentStep.reps) return;
-
-    const timeout = setTimeout(() => {
+    // Фіксуємо, що перехід уже запущено, щоб не скидався через часті оновлення з камери
+    isChangingExerciseRef.current = true;
+    changeExerciseTimeoutRef.current = setTimeout(() => {
       goToNextExercise();
+      isChangingExerciseRef.current = false;
+      changeExerciseTimeoutRef.current = null;
     }, 1200);
 
-    return () => clearTimeout(timeout);
+    return undefined;
   }, [
     reps,
     currentStep,
@@ -457,6 +283,14 @@ function WorkoutSessionPageContent({ slug }) {
     isWorkoutCompleted,
     goToNextExercise,
   ]);
+
+  useEffect(() => {
+    return () => {
+      if (changeExerciseTimeoutRef.current) {
+        clearTimeout(changeExerciseTimeoutRef.current);
+      }
+    };
+  }, []);
 
   if (!workout) {
     return (
