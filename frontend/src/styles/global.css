@@ -783,6 +783,12 @@ a {
   flex-wrap: wrap;
 }
 
+.exercise-save-message {
+  margin-top: 12px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
 .exercise-camera-section {
   background-color: var(--color-white);
   border: 1px solid var(--color-border);

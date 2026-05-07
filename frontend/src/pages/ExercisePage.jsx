@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import Header from "../components/Header";
 import rehabExercises from "../exercises/index.js";
 import usePoseDetection from "../hooks/usePoseDetection";
+import { useAuth } from "../context/useAuth";
+import { saveExerciseResult } from "../services/exerciseResultsService";
 
 function formatTime(totalSeconds) {
   const mins = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
@@ -37,11 +39,14 @@ function normalizeAnalyzeResult(result) {
 
 function ExercisePageContent({ slug }) {
   const { t } = useTranslation();
+  const { user } = useAuth();
 
   const exercise = rehabExercises.find((item) => item.id === slug);
 
   const [isStarted, setIsStarted] = useState(false);
+  const [wasStarted, setWasStarted] = useState(false);
   const [seconds, setSeconds] = useState(0);
+  const [saveMessage, setSaveMessage] = useState("");
 
   const cameraSectionRef = useRef(null);
 
@@ -104,11 +109,39 @@ function ExercisePageContent({ slug }) {
   const handleStartExercise = () => {
     setSeconds(0);
     setIsStarted(true);
+    setWasStarted(true);
+    setSaveMessage("");
     resetPoseState();
   };
 
   const handleStopExercise = () => {
     setIsStarted(false);
+  };
+
+  const canSaveResult = Boolean(user) && (isStarted || wasStarted) && reps > 0;
+
+  const handleSaveResult = async () => {
+    if (!canSaveResult || !exercise) return;
+
+    try {
+      await saveExerciseResult({
+        userId: user.uid,
+        userEmail: user.email || "",
+        exerciseId: exercise.id,
+        exerciseName: exercise.name,
+        reps,
+        seconds,
+        mainAngle,
+        feedback,
+        warning,
+      });
+      // Обробка успішного збереження
+      setSaveMessage("Результат збережено");
+    } catch (error) {
+      console.error("Помилка збереження результату:", error);
+      // Обробка помилки
+      setSaveMessage("Не вдалося зберегти результат");
+    }
   };
 
   const handleStartCamera = async () => {
@@ -244,7 +277,18 @@ function ExercisePageContent({ slug }) {
                   {t("exercise.stop")}
                 </button>
               )}
+
+              <button
+                type="button"
+                className="btn btn--secondary"
+                onClick={handleSaveResult}
+                disabled={!canSaveResult}
+              >
+                Зберегти результат
+              </button>
             </div>
+
+            {!!saveMessage && <p className="exercise-save-message">{saveMessage}</p>}
           </section>
 
           <section className="exercise-camera-section" ref={cameraSectionRef}>
